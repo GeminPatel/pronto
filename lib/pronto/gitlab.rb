@@ -73,16 +73,38 @@ module Pronto
 
     def pull
       @pull ||= if env_pull_id
-                  pull_requests.find { |pr| pr.iid.to_i == env_pull_id }
+                  pull_by_id(env_pull_id)
                 elsif @repo.branch
-                  pull_requests.find do |pr|
-                    pr.source_branch == @repo.branch
-                  end
+                  pull_by_branch(@repo.branch)
+                elsif @repo.head_detached?
+                  pull_by_commit(@repo.head_commit_sha)
                 end
     end
 
     def pull_requests
       @pull_requests ||= client.merge_requests(slug, { state: :opened, source_branch: @repo.branch }).auto_paginate
+    end
+
+    def pull_by_id(pull_id)
+      result = pull_requests.find { |pr| pr.iid.to_i == pull_id }
+      return result if result
+      message = "Merge request ##{pull_id} was not found in #{slug}."
+      raise Pronto::Error, message
+    end
+
+    def pull_by_branch(branch)
+      result = pull_requests.find { |pr| pr.source_branch == @repo.branch }
+      return result if result
+      raise Pronto::Error, "Merge request for branch #{branch} " \
+                           "was not found in #{slug}."
+    end
+
+    def pull_by_commit(sha)
+      result = pull_requests.find { |pr| pr.sha == sha }
+      return result if result
+      message = "Merge request with head #{sha} " \
+                "was not found in #{slug}."
+      raise Pronto::Error, message
     end
 
     def slug_regex(url)
